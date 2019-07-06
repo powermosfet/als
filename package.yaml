@@ -24,6 +24,22 @@ dependencies:
 
 library:
   source-dirs: src
+  default-extensions:
+    - NoImplicitPrelude
+    - OverloadedStrings
+    - RecordWildCards
+  dependencies:
+    - text
+    - transformers
+    - http-conduit
+    - bytestring
+    - errors
+    - aeson
+    - aeson
+    - servant
+    - servant-server
+    - protolude
+    - mtl
 
 executables:
   als-exe:
