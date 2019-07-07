@@ -13,8 +13,9 @@ als :: IO ()
 als = do
     result <- runExceptT $ do
         (config, port) <- Config.fromEnv 
-        liftIO $ putStrLn ("Starting ALS api server, listening on port " ++ (show port))
-        liftIO $ run port (serve api (server config))
+        liftIO $ do
+            putStrLn ("Starting ALS api server, listening on port " ++ (show port))
+            run port (serve api (server config))
 
     case result of
         Left error -> print error
