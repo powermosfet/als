@@ -27,25 +27,25 @@ withAuth (Auth {..}) req =
         & Http.addRequestHeader "X-Client-ID" clientId
         & Http.addRequestHeader "X-Access-Token" accessToken
 
-url :: [Char] -> [Char]
+url :: [Char] -> ExceptT Error IO Http.Request
 url path = "https://a.wunderlist.com/api/v1/" ++ path
+    & Http.parseRequest
+    & withExceptT HttpException
 
 data Error =
-    UrlParseError [Char]
+    HttpException Http.HttpException
     deriving (Show)
 
 getLists :: Auth -> ExceptT Error IO [List.List]
 getLists auth = do
-    req <- Http.parseRequest (url "lists")
-        & withExceptT UrlParseError
+    req <- url "lists"
         <&> withAuth auth
     response <- liftIO $ Http.httpJSON req
     return (Http.getResponseBody response)
 
 createTask :: Auth -> CreateTask.CreateTask -> ExceptT Error IO Task.Task
 createTask auth payload = do
-    req <- Http.parseRequest (url "tasks")
-        & withExceptT UrlParseError
+    req <- url "tasks"
         <&> withAuth auth
         <&> Http.setRequestMethod "POST"
         <&> Http.setRequestBodyJSON payload

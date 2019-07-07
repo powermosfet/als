@@ -14,8 +14,11 @@ import Protolude
 import Config (Config(..))
 import Control.Error.Util (failWith)
 import Data.Aeson (FromJSON)
-import Servant ((:>), JSON, err500, Post, Proxy(..), ReqBody)
+import Servant ((:>), JSON, ServantErr, errBody, err404, err500, Post, Proxy(..), ReqBody)
 import Servant.Server (Handler)
+import qualified Data.ByteString.Char8 as B
+import qualified Data.ByteString.Lazy as BL
+import qualified Network.HTTP.Simple as Http
 import qualified Wunderlist
 import qualified Wunderlist.CreateTask as CreateTask
 import qualified Wunderlist.List as List
@@ -26,7 +29,7 @@ data Item = Item
     { title :: Text
     } deriving (Show, Generic, FromJSON)
 
-data AlsError
+data Error
   = WunderlistError Wunderlist.Error
   | ListNotFound
   deriving (Show)
@@ -51,7 +54,17 @@ postItem (Config {..}) item = do
     case result of
         Right task -> return task
 
-        Left _ -> throwError err500
+        Left e -> throwError (makeServantError e)
+
+makeServantError :: Error -> ServantErr
+makeServantError (WunderlistError (Wunderlist.HttpException (Http.HttpExceptionRequest _ _))) =
+    err500
+makeServantError (WunderlistError (Wunderlist.HttpException (Http.InvalidUrlException url _))) =
+    err500
+        { errBody = BL.fromStrict $ B.pack $ "Error parsing url: " ++ url
+        }
+makeServantError ListNotFound =
+    err404
 
 api :: Proxy AlsApi
 api = Proxy
