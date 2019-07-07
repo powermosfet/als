@@ -1,46 +1,50 @@
 module Config 
     ( Config(..)
-    , CreateConfigError(..)
+    , Error(..)
     , fromEnv
-    , toAuth
     ) where
 
 import Protolude
 
-import Control.Error.Util (failWithM)
+import Control.Error.Util (failWithM, failWith)
 import System.Environment (lookupEnv)
 import Wunderlist (Auth(..))
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Text as T
 
 data Config = Config
-    { clientId :: B.ByteString
-    , accessToken :: B.ByteString
+    { auth :: Auth
     , listName :: Text
     } deriving (Show)
 
-data CreateConfigError
+data Error
     = NoEnvVar Text
+    | ParseErrorInt
     deriving (Show)
 
-fromEnv :: ExceptT CreateConfigError IO Config
-fromEnv = do
-    clientId <- lookupEnv "CLIENT_ID"
-        & failWithM (NoEnvVar "CLIENT_ID")
-        <&> B.pack
-    accessToken <- lookupEnv "ACCESS_TOKEN"
-        & failWithM (NoEnvVar "ACCESS_TOKEN")
-        <&> B.pack
-    listName <- lookupEnv "LIST_NAME"
-        & failWithM (NoEnvVar "LIST_NAME")
-        <&> T.pack
-    return $ Config
-        clientId
-        accessToken
-        listName
+bytestring :: (Monad m) => [Char] -> ExceptT Error m ByteString
+bytestring = return . B.pack
 
-toAuth :: Config -> Auth
-toAuth (Config {..}) = Auth 
-    { clientId = clientId
-    , accessToken = accessToken
-    }
+text :: (Monad m) => [Char] -> ExceptT Error m Text
+text = return . T.pack
+
+int :: (Monad m) => [Char] -> ExceptT Error m Int
+int = failWith ParseErrorInt . readMaybe
+
+fromEnv :: ExceptT Error IO (Config, Int)
+fromEnv = 
+    let
+        findOption name convert =
+            lookupEnv name
+                & failWithM (NoEnvVar (T.pack name))
+                >>= convert
+    in do
+    auth <- return Auth
+        <*> findOption "CLIENT_ID" bytestring
+        <*> findOption "ACCESS_TOKEN" bytestring
+
+    config <- return (Config auth)
+        <*> findOption "LIST_NAME" text
+
+    return ((,) config)
+        <*> findOption "PORT" int

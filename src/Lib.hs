@@ -1,30 +1,20 @@
 module Lib
-  ( someFunc
+  ( als
   ) where
 
 import Protolude
 
-import Control.Error.Util (failWith)
 import qualified Config
-import qualified Wunderlist
+import Api (server, api)
+import Servant (serve)
+import Network.Wai.Handler.Warp (run)
 
-data AlsError
-  = CreateConfigError Config.CreateConfigError
-  | GetListsError Wunderlist.GetListsError
-  | ListNotFound
-  deriving (Show)
-
-someFunc :: IO ()
-someFunc = do
+als :: IO ()
+als = do
     result <- runExceptT $ do
-        config <- withExceptT CreateConfigError
-            $ Config.fromEnv
-        let auth = Config.toAuth config
-        dagligvarerLookup  <- withExceptT GetListsError (Wunderlist.getLists auth)
-            <&> filter (\l -> Wunderlist.title l == (Config.listName config))
-            <&> head
-        dagligvarer <- failWith ListNotFound dagligvarerLookup
-        liftIO $ print dagligvarer
+        (config, port) <- Config.fromEnv 
+        liftIO $ putStrLn ("Starting ALS api server, listening on port " ++ (show port))
+        liftIO $ run port (serve api (server config))
 
     case result of
         Left error -> print error

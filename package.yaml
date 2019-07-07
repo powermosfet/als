@@ -29,17 +29,18 @@ library:
     - OverloadedStrings
     - RecordWildCards
   dependencies:
-    - text
-    - transformers
-    - http-conduit
+    - aeson
+    - aeson
     - bytestring
     - errors
-    - aeson
-    - aeson
+    - http-conduit
+    - mtl
+    - protolude
     - servant
     - servant-server
-    - protolude
-    - mtl
+    - text
+    - transformers
+    - warp
 
 executables:
   als-exe:
