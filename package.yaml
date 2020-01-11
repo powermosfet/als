@@ -34,6 +34,7 @@ library:
     - bytestring
     - errors
     - http-conduit
+    - http-types
     - mtl
     - protolude
     - servant

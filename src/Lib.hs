@@ -12,10 +12,10 @@ import Network.Wai.Handler.Warp (run)
 als :: IO ()
 als = do
     result <- runExceptT $ do
-        (config, port) <- Config.fromEnv 
+        port <- Config.findOption "PORT" Config.int
         liftIO $ do
             putStrLn ("Starting ALS api server, listening on port " ++ (show port))
-            run port (serve api (server config))
+            run port (serve api server)
 
     case result of
         Left error -> print error

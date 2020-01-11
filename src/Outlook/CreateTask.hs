@@ -1,7 +1,7 @@
-{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE DeriveGeneric #-}
 
-module Wunderlist.CreateTask
+module Outlook.CreateTask
     ( CreateTask(..)
     ) where
 
@@ -11,7 +11,5 @@ import GHC.Generics (Generic)
 import Data.Aeson (ToJSON)
 
 data CreateTask = CreateTask
-    { list_id :: Int
-    , title :: Text
+    { subject :: Text
     } deriving (Show, Generic, ToJSON)
-
