@@ -41,6 +41,7 @@ library:
     - servant-server
     - text
     - transformers
+    - unordered-containers
     - warp
 
 executables:

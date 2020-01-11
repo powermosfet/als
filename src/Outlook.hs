@@ -20,6 +20,7 @@ import qualified Network.HTTP.Simple as Http
 import qualified Network.HTTP.Types.Status as Status
 import qualified Outlook.CreateTask as CreateTask 
 import qualified Outlook.MoveTask as MoveTask 
+import qualified Outlook.ResponseOrError as OutlookApiError
 import qualified Outlook.Task as Task 
 
 data Auth = Auth
@@ -38,13 +39,13 @@ setAuth (Auth {..}) = do
     setEnv "ACCESS_TOKEN" access_token
     setEnv "REFRESH_TOKEN" refresh_token
 
-withRefresh :: ExceptT Error IO (Http.Response a) -> ExceptT Error IO (Http.Response a)
+withRefresh :: ExceptT Error IO (Http.Response (OutlookApiError.ResponseOrError a)) -> ExceptT Error IO (Http.Response a)
 withRefresh doRequest = do
     response <- doRequest
     if Http.getResponseStatus response == Status.unauthorized401 then
-        refreshAccessToken >> doRequest
+        refreshAccessToken >> doRequest >>= catchApiError 
     else
-        return response
+        catchApiError response
 
 withAuth :: Auth -> Http.Request -> Http.Request
 withAuth (Auth {..}) req =
@@ -80,7 +81,14 @@ request url = url
 data Error
     = ConfigError Config.Error
     | HttpException Http.HttpException
+    | ApiError OutlookApiError.OutlookApiError
     deriving (Show)
+
+catchApiError :: Http.Response (OutlookApiError.ResponseOrError a) -> ExceptT Error IO (Http.Response a)
+catchApiError response =
+    case Http.getResponseBody response of
+        OutlookApiError.SuccessResponse aValue -> return (fmap (const aValue) response)
+        OutlookApiError.ErrorResponse error -> throwError (ApiError error)
 
 findOption :: [Char] -> ([Char] -> ExceptT Config.Error IO a) -> ExceptT Error IO a
 findOption name convert = 
@@ -95,21 +103,21 @@ createTask payload = do
     moveResponse <- withRefresh (moveTask moveToDagligvarer (Http.getResponseBody createResponse))
     return $ Http.getResponseBody moveResponse
 
-createTask' :: CreateTask -> ExceptT Error IO (Http.Response Task)
+createTask' :: CreateTask -> ExceptT Error IO (Http.Response (OutlookApiError.ResponseOrError Task))
 createTask' payload = do
     auth <- getAuth
     req <- request allTasksUrl
         <&> withAuth auth
         <&> Http.setRequestMethod "POST"
         <&> Http.setRequestBodyJSON payload
-    liftIO $ Http.httpJSON req
+    liftIO (Http.httpJSON req)
 
-moveTask :: MoveTask -> Task -> ExceptT Error IO (Http.Response Task)
+moveTask :: MoveTask -> Task -> ExceptT Error IO (Http.Response (OutlookApiError.ResponseOrError Task))
 moveTask payload task = do
     let taskId = Task.id task
     auth <- getAuth
     req <- request (taskUrl taskId)
         <&> withAuth auth
-        <&> Http.setRequestMethod "POST"
+        <&> Http.setRequestMethod "PATCH"
         <&> Http.setRequestBodyJSON payload
-    liftIO $ Http.httpJSON req
+    liftIO (Http.httpJSON req)
