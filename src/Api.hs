@@ -14,7 +14,7 @@ import Protolude
 import Control.Error.Util (failWith)
 import Data.Aeson (FromJSON)
 import Outlook.CreateTask (CreateTask(..))
-import Servant ((:>), JSON, ServantErr, errBody, err404, err500, Post, Proxy(..), ReqBody)
+import Servant ((:>), JSON, errBody, err404, err500, Post, Proxy(..), ReqBody, ServerError)
 import Servant.Server (Handler)
 import qualified Data.ByteString.Char8 as B
 import qualified Data.ByteString.Lazy as BL
@@ -34,10 +34,10 @@ data Error
 
 type AlsApi = "item" :> ReqBody '[JSON] Item :> Post '[JSON] WT.Task
 
-server :: Item -> Handler WT.Task
+server :: Item -> Servant.Server.Handler WT.Task
 server = postItem
 
-postItem :: Item -> Handler WT.Task
+postItem :: Item -> Servant.Server.Handler WT.Task
 postItem  item = do
     result <- liftIO $ runExceptT $
         Outlook.createTask (CreateTask
@@ -49,7 +49,7 @@ postItem  item = do
 
         Left e -> throwError (makeServantError e)
 
-makeServantError :: Error -> ServantErr
+makeServantError :: Error -> ServerError
 makeServantError (OutlookError (Outlook.HttpException (Http.HttpExceptionRequest _ _))) =
     err500
 makeServantError (OutlookError (Outlook.HttpException (Http.InvalidUrlException url _))) =
