@@ -45,7 +45,7 @@ library:
     - warp
 
 executables:
-  als-exe:
+  als:
     main:                Main.hs
     source-dirs:         app
     ghc-options:

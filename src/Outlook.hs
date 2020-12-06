@@ -41,6 +41,7 @@ setAuth (Auth {..}) = do
 
 withRefresh :: ExceptT Error IO (Http.Response (OutlookApiError.ResponseOrError a)) -> ExceptT Error IO (Http.Response a)
 withRefresh doRequest = do
+    print "withRefresh"
     response <- doRequest
     if Http.getResponseStatus response == Status.unauthorized401 then
         refreshAccessToken >> doRequest >>= catchApiError 
@@ -54,6 +55,7 @@ withAuth (Auth {..}) req =
 
 refreshAccessToken :: ExceptT Error IO ()
 refreshAccessToken = do
+    print "refreshAccessToken"
     clientId <- findOption "CLIENT_ID" Config.bytestring
     refreshToken <- findOption "REFRESH_TOKEN" Config.bytestring
     req <- request "https://login.microsoftonline.com/common/oauth2/v2.0/token"
@@ -97,6 +99,7 @@ findOption name convert =
 
 createTask :: CreateTask -> ExceptT Error IO Task
 createTask payload = do
+    print "createTask"
     dagligvarerId <- findOption "LIST_ID" return
     let moveToDagligvarer = MoveTask dagligvarerId
     createResponse <- withRefresh (createTask' payload) 
@@ -105,6 +108,7 @@ createTask payload = do
 
 createTask' :: CreateTask -> ExceptT Error IO (Http.Response (OutlookApiError.ResponseOrError Task))
 createTask' payload = do
+    print "createTask'"
     auth <- getAuth
     req <- request allTasksUrl
         <&> withAuth auth
@@ -114,6 +118,7 @@ createTask' payload = do
 
 moveTask :: MoveTask -> Task -> ExceptT Error IO (Http.Response (OutlookApiError.ResponseOrError Task))
 moveTask payload task = do
+    print "moveTask"
     let taskId = Task.id task
     auth <- getAuth
     req <- request (taskUrl taskId)
