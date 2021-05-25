@@ -11,13 +11,21 @@ import Network.Wai.Handler.Warp (run)
 
 als :: IO ()
 als = do
-    result <- runExceptT $ do
-        port <- Config.findOption "PORT" Config.int
-        liftIO $ do
-            putStrLn ("Starting ALS api server, listening on port " ++ (show port))
-            run port (serve api server)
+    args <- getArgs
+    case args of
+        [ "--auth" ] -> do
+            clientId <- Config.findOption "CLIENT_ID" Config.bytestring
+            let url =  "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=" ++ clientId ++ "&scope=Tasks.ReadWrite&response_type=code"
+            print url
 
-    case result of
-        Left error -> print error
+        _ -> do
+            result <- runExceptT $ do
+                port <- Config.findOption "PORT" Config.int
+                liftIO $ do
+                    putStrLn ("Starting ALS api server, listening on port " ++ (show port))
+                    run port (serve api server)
 
-        Right _ -> return ()
+            case result of
+                Left error -> print error
+
+                Right _ -> return ()
