@@ -3,6 +3,7 @@ module Config
     , bytestring
     , findOption
     , int
+    , string
     ) where
 
 import Protolude
@@ -16,6 +17,9 @@ data Error
     = NoEnvVar Text
     | ParseErrorInt
     deriving (Show)
+
+string :: [Char] -> ExceptT Error IO [Char]
+string = return
 
 bytestring :: [Char] -> ExceptT Error IO ByteString
 bytestring = return . B.pack

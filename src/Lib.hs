@@ -4,28 +4,37 @@ module Lib
 
 import Protolude
 
-import qualified Config
 import Api (server, api)
-import Servant (serve)
 import Network.Wai.Handler.Warp (run)
+import Servant (serve)
+import System.IO (hSetBuffering, stdout, BufferMode(NoBuffering))
+import qualified Config
+import qualified Data.Text as T
+import qualified Outlook
+import qualified Outlook.Auth
+
+data Error 
+  = ConfigError Config.Error
+  | OutlookError Outlook.Error
+  | AuthError Outlook.Auth.Error
+  deriving (Show)
 
 als :: IO ()
 als = do
+    hSetBuffering stdout NoBuffering
     args <- getArgs
-    case args of
-        [ "--auth" ] -> do
-            clientId <- Config.findOption "CLIENT_ID" Config.bytestring
-            let url =  "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?client_id=" ++ clientId ++ "&scope=Tasks.ReadWrite&response_type=code"
-            print url
+    result <- runExceptT $ case args of
+        [ "--auth" ] -> withExceptT AuthError Outlook.Auth.authenticate
 
         _ -> do
-            result <- runExceptT $ do
-                port <- Config.findOption "PORT" Config.int
-                liftIO $ do
-                    putStrLn ("Starting ALS api server, listening on port " ++ (show port))
-                    run port (serve api server)
+            port <- withExceptT ConfigError $ Config.findOption "PORT" Config.int
+            lists <- withExceptT OutlookError $ Outlook.getLists
+            liftIO $ do
+                putStrLn ("Starting ALS api server, listening on port " ++ (show port))
+                mapM print lists
+                run port (serve api server)
 
-            case result of
-                Left error -> print error
+    case result of
+        Left error -> print error
 
-                Right _ -> return ()
+        Right _ -> return ()

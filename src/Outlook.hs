@@ -5,6 +5,7 @@ module Outlook
     ( Auth(..)
     , Error(..)
     , createTask
+    , getLists
     ) where
 
 import Protolude
@@ -22,6 +23,7 @@ import qualified Outlook.CreateTask as CreateTask
 import qualified Outlook.MoveTask as MoveTask 
 import qualified Outlook.ResponseOrError as OutlookApiError
 import qualified Outlook.Task as Task 
+import qualified Outlook.List as List 
 
 data Auth = Auth
     { access_token :: [Char]
@@ -75,6 +77,12 @@ allTasksUrl = "https://graph.microsoft.com/beta/me/outlook/tasks"
 taskUrl :: Task.Id -> [Char]
 taskUrl taskId = "https://graph.microsoft.com/beta/me/outlook/tasks/" <> taskId
 
+listUrl :: List.Id -> [Char]
+listUrl listId = "https://graph.microsoft.com/v1.0/me/todo/list/" <> listId <> "/tasks"
+
+listListUrl :: [Char]
+listListUrl = "https://graph.microsoft.com/v1.0/me/todo/lists" 
+
 request :: [Char] -> ExceptT Error IO Http.Request
 request url = url
     & Http.parseRequest
@@ -84,6 +92,7 @@ data Error
     = ConfigError Config.Error
     | HttpException Http.HttpException
     | ApiError OutlookApiError.OutlookApiError
+    | HugeMistake Status.Status
     deriving (Show)
 
 catchApiError :: Http.Response (OutlookApiError.ResponseOrError a) -> ExceptT Error IO (Http.Response a)
@@ -100,29 +109,28 @@ findOption name convert =
 createTask :: CreateTask -> ExceptT Error IO Task
 createTask payload = do
     print "createTask"
-    dagligvarerId <- findOption "LIST_ID" return
-    let moveToDagligvarer = MoveTask dagligvarerId
     createResponse <- withRefresh (createTask' payload) 
-    moveResponse <- withRefresh (moveTask moveToDagligvarer (Http.getResponseBody createResponse))
-    return $ Http.getResponseBody moveResponse
+    if Http.getResponseStatus createResponse == Status.created201 then do
+        return $ Http.getResponseBody createResponse
+    else
+        throwError (HugeMistake (Http.getResponseStatus createResponse))
 
 createTask' :: CreateTask -> ExceptT Error IO (Http.Response (OutlookApiError.ResponseOrError Task))
 createTask' payload = do
     print "createTask'"
     auth <- getAuth
-    req <- request allTasksUrl
+    dagligvarerId <- findOption "LIST_ID" return
+    req <- request (listUrl dagligvarerId)
         <&> withAuth auth
         <&> Http.setRequestMethod "POST"
         <&> Http.setRequestBodyJSON payload
     liftIO (Http.httpJSON req)
 
-moveTask :: MoveTask -> Task -> ExceptT Error IO (Http.Response (OutlookApiError.ResponseOrError Task))
-moveTask payload task = do
-    print "moveTask"
-    let taskId = Task.id task
+getLists :: ExceptT Error IO (Http.Response (OutlookApiError.ResponseOrError List.List))
+getLists = do
+    print "createTask'"
     auth <- getAuth
-    req <- request (taskUrl taskId)
+    req <- request listListUrl
         <&> withAuth auth
-        <&> Http.setRequestMethod "PATCH"
-        <&> Http.setRequestBodyJSON payload
+        <&> Http.setRequestMethod "GET"
     liftIO (Http.httpJSON req)
