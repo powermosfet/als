@@ -11,5 +11,5 @@ import GHC.Generics (Generic)
 import Data.Aeson (ToJSON)
 
 data CreateTask = CreateTask
-    { subject :: Text
+    { title :: Text
     } deriving (Show, Generic, ToJSON)

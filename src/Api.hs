@@ -38,14 +38,14 @@ server :: Item -> Servant.Server.Handler WT.Task
 server = postItem
 
 postItem :: Item -> Servant.Server.Handler WT.Task
-postItem  item = do
+postItem item = do
     result <- liftIO $ runExceptT $
         Outlook.createTask (CreateTask
-            { subject = (title item)
+            { title = (Api.title item)
             }) & withExceptT OutlookError
             
     case result of
-        Right task -> return task
+        Right taskResult -> return taskResult
 
         Left e -> throwError (makeServantError e)
 

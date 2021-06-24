@@ -13,4 +13,5 @@ import GHC.Generics (Generic)
 
 data AuthToken = AuthToken
     { access_token :: Text
+    , refresh_token :: Text
     } deriving (Show, Generic, FromJSON)
