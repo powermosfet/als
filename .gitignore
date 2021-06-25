@@ -4,3 +4,4 @@ als.cabal
 /result
 /*.env
 /dist-newstyle/
+/dist/
