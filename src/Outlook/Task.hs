@@ -4,6 +4,8 @@
 module Outlook.Task
     ( Task(..)
     , Id
+    , increment
+    , matchesTitle
     ) where
 
 import Protolude
@@ -15,4 +17,14 @@ type Id = [Char]
 
 data Task = Task
     { id :: Id
+    , title :: Text
+    , status :: Text
     } deriving (Show, Generic, ToJSON, FromJSON)
+
+matchesTitle :: Text -> Task -> Bool
+matchesTitle titleToMatch task =
+    title task == titleToMatch
+
+increment :: Task -> Task
+increment task =
+    task { status = "notStarted" }

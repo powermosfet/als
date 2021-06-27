@@ -42,11 +42,14 @@ httpWithReauth req = do
           _ -> throwError err
       )
     
-listUrl :: List.Id -> [Char]
-listUrl listId = "https://graph.microsoft.com/v1.0/me/todo/lists/" <> listId <> "/tasks"
-
 listListUrl :: [Char]
 listListUrl = "https://graph.microsoft.com/v1.0/me/todo/lists" 
+
+listUrl :: List.Id -> [Char]
+listUrl listId = listListUrl <> "/" <> listId <> "/tasks"
+
+taskUrl :: List.Id -> Task.Id -> [Char]
+taskUrl listId taskId = listUrl listId <> "/" <> taskId
 
 request :: [Char] -> ExceptT Error IO Http.Request
 request url = url
@@ -65,6 +68,19 @@ findOption name convert =
     Config.findOption name convert
         &   withExceptT ConfigError
 
+findExisting :: CreateTask -> [ Task ] -> Maybe Task
+findExisting inputTask existingTasks =
+    Protolude.find (Task.matchesTitle (CreateTask.title inputTask)) existingTasks
+
+createOrUpdateTask :: CreateTask -> ExceptT Error IO Task
+createOrUpdateTask payload = do
+    print "createOrUpdateTask"
+    allTasks <- getTasks
+    let existingTask = findExisting payload allTasks
+    case existingTask of
+      Just someTask -> Task.increment someTask & updateTask
+      Nothing -> createTask payload
+
 createTask :: CreateTask -> ExceptT Error IO Task
 createTask payload = do
     print "createTask"
@@ -75,10 +91,27 @@ createTask payload = do
         >>= httpWithReauth
         >>= (withExceptT OutlookResponseError . Request.unwrap)
 
+updateTask :: Task -> ExceptT Error IO Task
+updateTask t = do
+    print "updateTask"
+    dagligvarerId <- findOption "LIST_ID" return
+    request (taskUrl dagligvarerId (Task.id t))
+        <&> Http.setRequestMethod "PUT"
+        <&> Http.setRequestBodyJSON t
+        >>= httpWithReauth
+        >>= (withExceptT OutlookResponseError . Request.unwrap)
+
+getTasks :: ExceptT Error IO [Task]
+getTasks = do
+    print "getTasks"
+    dagligvarerId <- findOption "LIST_ID" return
+    request (listUrl dagligvarerId)
+        >>= httpWithReauth 
+        >>= (withExceptT OutlookResponseError . Request.unwrap)
+
 getLists :: ExceptT Error IO [List.List]
 getLists = do
     print "getLists"
     request listListUrl
-        <&> Http.setRequestMethod "GET"
         >>= httpWithReauth 
         >>= (withExceptT OutlookResponseError . Request.unwrap)
