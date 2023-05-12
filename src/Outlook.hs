@@ -3,6 +3,7 @@
 
 module Outlook
     ( Error(..)
+    , createTask
     , createOrUpdateTask
     , getLists
     ) where
