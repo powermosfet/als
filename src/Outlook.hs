@@ -75,7 +75,7 @@ findExisting inputTask existingTasks =
 
 createOrUpdateTask :: CreateTask -> ExceptT Error IO Task
 createOrUpdateTask payload = do
-    print ("createOrUpdateTask: " <> show payload)
+    print ("createOrUpdateTask: " <> T.show payload)
     allTasks <- getTasks
     let existingTask = findExisting payload allTasks
     case existingTask of
@@ -84,7 +84,7 @@ createOrUpdateTask payload = do
 
 createTask :: CreateTask -> ExceptT Error IO Task
 createTask payload = do
-    print ("createTask: " <> show payload)
+    print ("createTask: " <> T.show payload)
     dagligvarerId <- findOption "LIST_ID" return
     request (listUrl dagligvarerId)
         <&> Http.setRequestMethod "POST"
