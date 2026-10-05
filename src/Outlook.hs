@@ -34,9 +34,11 @@ httpWithReauth req = do
           OutlookResponseError (Request.HttpStatusError status headers) ->
             if status == Status.unauthorized401 then do
                 print "Unauthorized... :'( Fetching new token"
-                newAccessToken <- encodeUtf8 <$> AuthToken.access_token <$> withExceptT AuthError Auth.refresh
+                newTokens <- withExceptT AuthError Auth.refresh
+                let newAccessToken = encodeUtf8 (AuthToken.access_token newTokens)
                 print "Got new token!"
                 liftIO $ setEnv "ACCESS_TOKEN" $ T.unpack $ decodeUtf8 newAccessToken
+                liftIO $ setEnv "REFRESH_TOKEN" (T.unpack (AuthToken.refresh_token newTokens))
                 req & Request.withToken >>= Request.send & withExceptT OutlookResponseError
             else
                 throwError (OutlookResponseError (Request.HttpStatusError status headers))
@@ -75,7 +77,6 @@ findExisting inputTask existingTasks =
 
 createOrUpdateTask :: CreateTask -> ExceptT Error IO Task
 createOrUpdateTask payload = do
-    print ("createOrUpdateTask: " <> T.pack (show payload))
     allTasks <- getTasks
     let existingTask = findExisting payload allTasks
     case existingTask of
@@ -84,13 +85,11 @@ createOrUpdateTask payload = do
 
 createTask :: CreateTask -> ExceptT Error IO Task
 createTask payload = do
-    print ("createTask: " <> T.pack (show payload))
     dagligvarerId <- findOption "LIST_ID" return
     request (listUrl dagligvarerId)
         <&> Http.setRequestMethod "POST"
         <&> Http.setRequestBodyJSON payload
         >>= httpWithReauth
-        >>= (withExceptT OutlookResponseError . Request.unwrap)
 
 updateTask :: Task -> ExceptT Error IO Task
 updateTask t = do

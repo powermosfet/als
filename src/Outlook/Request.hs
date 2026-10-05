@@ -17,13 +17,15 @@ import Control.Monad (fail)
 import Data.Aeson (ToJSON, FromJSON, parseJSON, Value(..))
 import GHC.Generics (Generic)
 import qualified Config
-import qualified Data.HashMap.Lazy as HashMap
+import qualified Data.Aeson.KeyMap as KeyMap
+import Control.Exception (try)
 import qualified Network.HTTP.Simple as Http
 import qualified Network.HTTP.Types.Header as HttpHeader
 import qualified Network.HTTP.Types.Status as Status
 
 data Error
-  = ConfigError Config.Error
+  = TransportError Http.HttpException
+  | ConfigError Config.Error
   | JsonExceptionError Http.JSONException
   | HttpStatusError Status.Status [(HttpHeader.HeaderName, ByteString)]
   | OutlookApiError OutlookApiErrorDetails
@@ -35,13 +37,9 @@ data Response a
     deriving (Show)
 
 instance (FromJSON a) => FromJSON (Response a) where
-  parseJSON (value@(Object v)) =
-    let
-        entry = head (HashMap.toList v)
-    in
-    case entry of
-        Just ("error", _) -> ErrorResponse <$> parseJSON value
-        _ -> SuccessResponse <$> parseJSON value
+  parseJSON obj@(Object v)
+    | KeyMap.member "error" v = ErrorResponse <$> parseJSON obj
+    | otherwise = SuccessResponse <$> parseJSON obj
 
   parseJSON _ = fail "Invalid JSON type"
 
@@ -72,7 +70,8 @@ withToken req = do
 
 send :: (FromJSON a) => Http.Request -> ExceptT Error IO a
 send req = do
-  response <- liftIO $ Http.httpJSONEither req
+  response <- ExceptT (liftIO $ try $ Http.httpJSONEither (Http.setRequestIgnoreStatus req))
+    & withExceptT TransportError
   let status = Http.getResponseStatus response
   let body = Http.getResponseBody response
   if status == Status.created201 || status == Status.ok200 then

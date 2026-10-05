@@ -1,0 +1,3 @@
+packages: .
+-- Resolve against the dependencies supplied by nix develop, without contacting Hackage.
+active-repositories: :none
