@@ -16,7 +16,8 @@ The flake pins `nixos-unstable` in `flake.lock` and exposes a default package, a
 development shell (GHC, Cabal, HLS, HLint, RabbitMQ and Python), and checks on
 `x86_64-linux` and `aarch64-linux`. Checks run the unit/HTTP tests and a disposable
 RabbitMQ integration harness on the host platform. No Microsoft credentials are
-needed for tests. ALS does not include a NixOS service module or container image.
+needed for tests. The flake also exports `nixosModules.default` for the managed
+service and its `als-auth` command. No container image is included.
 
 ## Configuration
 
@@ -36,7 +37,7 @@ Set these variables before running `als` or `nix run`:
 | `CLIENT_ID` | Required: Microsoft application/client ID |
 | `ACCESS_TOKEN`, `REFRESH_TOKEN` | Required unless loaded from `TOKEN_FILE` |
 | `TOKEN_FILE` | Optional path to persistent JSON tokens |
-| `REDIRECT_URL` | Required only for `--auth`; must match your app registration |
+| `REDIRECT_URL` | Required only for legacy `--auth-code`; must match your app registration |
 
 Blank settings and invalid numbers fail startup with a nonzero exit status.
 Timeouts must fit in the platform's integer number of microseconds. Retry delays
@@ -48,21 +49,32 @@ bodies or HTTP error bodies.
 ## Authentication and token storage
 
 Register a Microsoft public-client application with delegated `Tasks.ReadWrite`
-and `offline_access` permissions and a redirect URL. Run:
+and `offline_access` permissions. In the Microsoft app registration's
+**Authentication → Advanced settings**, enable **Allow public client flows**.
+For a personal Microsoft account, the application's supported account types must
+include personal Microsoft accounts. Device-code sign-in needs no redirect URL.
+Work/school tenant policy may restrict device-code sign-in.
+
+For a standalone worker:
 
 ```sh
 export CLIENT_ID='your-application-id'
-export REDIRECT_URL='your-registered-redirect-url'
 export TOKEN_FILE="$PWD/tokens.json"
 nix run -- --auth
 ```
 
-Open the printed authorization URL in a browser, consent, and paste **only the
-`code` query parameter** from the redirect URL (URL-decode it first). ALS uses no
-HTTP listener. With `TOKEN_FILE`, it saves the resulting access and refresh
-tokens; without it, it prints them once for manual setup. `LIST_ID` is not needed
-for this setup command. Find your list ID with Graph's
-[`GET /me/todo/lists`](https://learn.microsoft.com/en-us/graph/api/todo-list-lists?view=graph-rest-1.0).
+ALS prints a Microsoft sign-in URL and a short code. Open the URL on your laptop
+or phone, enter the code, and sign in. ALS waits, then saves both tokens. There is
+no URL copying back into the terminal, no local browser dependency, and no HTTP
+listener. With `TOKEN_FILE`, tokens are never printed; without it they are
+printed once for manual setup. Cancellation, denial and expiry fail without
+replacing the previous tokens. `LIST_ID` is not needed for sign-in. Find it with
+Graph's [`GET /me/todo/lists`](https://learn.microsoft.com/en-us/graph/api/todo-list-lists?view=graph-rest-1.0).
+
+The older authorization-code flow remains available as `als --auth-code`. It
+requires `REDIRECT_URL`, and asks you to paste the URL-decoded authorization code
+from the browser redirect. This is a fallback if device-code flow is unavailable.
+See Microsoft's [device-code protocol](https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-device-code).
 
 The token file has this shape:
 
@@ -83,6 +95,68 @@ Creation decodes Graph's direct
 [task response](https://learn.microsoft.com/en-us/graph/api/todotasklist-post-tasks?view=graph-rest-1.0).
 Refresh replaces both tokens following Microsoft's
 [token refresh guidance](https://learn.microsoft.com/en-us/entra/identity-platform/refresh-tokens).
+
+## NixOS service and one-command sign-in
+
+Add ALS as a flake input (a local checkout can use
+`inputs.als.url = "path:/path/to/als"`), then import the module in your NixOS
+configuration:
+
+```nix
+{
+  imports = [ inputs.als.nixosModules.default ];
+  services.als = {
+    enable = true;
+    clientId = "your-application-id";
+    listId = "your-list-id";
+    # Defaults consume shopping-list-items on localhost as guest.
+    # rabbitmq.host = "localhost";
+    # environmentFile = "/run/secrets/als-environment";
+  };
+}
+```
+
+After rebuilding NixOS, initial setup and any later reauthentication use the same
+command:
+
+```sh
+sudo als-auth
+# From another machine:
+ssh -t your-server sudo als-auth
+```
+
+The command stops `als.service`, runs device-code sign-in as the `als` service
+account in a transient systemd unit, saves the tokens, clears the service's
+failed/start-limit state and starts it again. The transient unit creates the state
+directory even on first setup. A lock prevents simultaneous sign-ins; systemd
+conflicts prevent the worker and sign-in unit from writing tokens concurrently.
+If sign-in fails or is cancelled, the helper leaves the worker stopped. Run the
+same command again to retry.
+
+Tokens live in `/var/lib/als/tokens.json`, owned by `als`, with permissions `0600`;
+the persistent state directory is `0700`. Credentials survive reboots and NixOS
+rebuilds. Do not put tokens in a Nix expression, the Nix store, or a read-only
+systemd credential: ALS needs to replace them when it refreshes.
+
+Normal refresh still happens automatically on 401. Missing/invalid saved tokens or
+a failed refresh that requires sign-in exit with **78**, leaving queued work
+unacknowledged. The module sets `RestartPreventExitStatus=78` so the service stays
+failed with a sign-in hint in the journal instead of restarting endlessly. Other
+failures exit with 1 and use `Restart=on-failure`. No interactive login is started
+in the background; you decide when to run `als-auth`.
+
+```sh
+systemctl status als
+journalctl -u als -n 50
+```
+
+Module options include `package`, `clientId`, `listId`, `retryDelaySeconds`,
+`httpTimeoutSeconds`, and `rabbitmq.{host,port,vhost,username,queue}`. For a broker
+password, point `environmentFile` at an absolute runtime file containing
+`RABBITMQ_PASSWORD=...`, managed by your existing secrets setup. The environment
+file is read by systemd for both worker and sign-in; it should not override
+`TOKEN_FILE`, which must remain in the service's writable state directory. The
+module does not create the RabbitMQ queue or provision a Microsoft application.
 
 ## Queue and messages
 
@@ -134,3 +208,10 @@ one, redelivery after interruption, and reconnection after restarting the broker
 application. The Graph stub binds a dynamically assigned loopback port. The
 broker is stopped on exit. The production executable always uses Microsoft's
 HTTPS endpoints; local endpoints are injected only through the test API.
+
+The `nixos-auth` flake check boots a disposable NixOS VM with a deterministic
+sign-in backend. It verifies the real systemd helper, first login, token
+ownership/permissions, failed and cancelled login, concurrent-login exclusion,
+and recovery after an authentication failure without a restart loop. Device-code
+protocol behavior is tested separately against a local HTTP stub, including
+pending authorization, polling slowdown, expiry and transient errors.

@@ -31,6 +31,7 @@ library
       GraphClient
       Worker
       SetupAuth
+      DeviceAuth
       Lib
       Outlook
       Outlook.Auth
@@ -85,6 +86,7 @@ test-suite als-test
   other-modules:
       Paths_als
       Integration
+      DeviceAuthSpec
   hs-source-dirs:
       test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N2

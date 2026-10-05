@@ -22,6 +22,7 @@ import System.FilePath
 import System.IO
 import System.Posix.Files
 import Integration (integrationTests)
+import DeviceAuthSpec (deviceAuthTests)
 import Test.HUnit
 import Delivery
 import qualified GraphClient as G
@@ -40,7 +41,7 @@ tokens = Tokens "initial-access" "initial-refresh"
 main :: IO ()
 main = do
   integration <- integrationTests
-  counts <- runTestTT (TestList [parsing,configuration,deliveryTests,tokenTests,httpTests,integration])
+  counts <- runTestTT (TestList [parsing,configuration,deliveryTests,tokenTests,httpTests,deviceAuthTests,integration])
   when (errors counts + failures counts /= 0) exitFailure
 
 parsing :: Test
